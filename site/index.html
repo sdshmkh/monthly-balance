@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0b1f4b">
+<meta name="description" content="Monthly balance calculator: income, loans and fixed costs, with a payoff planner.">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Balance">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon-192.png" type="image/png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<title>Monthly Balance Calculator</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Red+Hat+Display:wght@600;700;800&family=Red+Hat+Text:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/* VOICE work: a money tool, calm and exact
+   IDEA a bank statement's monthly summary: money in, money out, closing gap
+   PICTURE the live result: two bars, income vs outgoings (interest + fixed), and the gap in large figures
+   COLOUR oxford blue band, white panels, magenta for the shortfall, green-teal for surplus
+   TYPE Red Hat Display + Red Hat Text
+   LAYOUT laptop: inputs left, sticky result right; phone: title, slim sticky result, inputs */
+:root{color-scheme:light dark;--bg:light-dark(#eef1f7,#070f26);--band:#0b1f4b;--panel:light-dark(#fff,#0f1d42);--ink:light-dark(#0b1f4b,#e9eefb);--mute:light-dark(#56627e,#9aa7c7);--line:light-dark(#d6dcea,#22325e);--mag:#e0115f;--int:light-dark(#e0115f,#ff4d8d);--fix:light-dark(#8a3ffc,#a879ff);--inc:light-dark(#0a7d6b,#2fd1b3);--field:light-dark(#f7f8fc,#0a1534)}
+:root[data-theme=light]{color-scheme:light}:root[data-theme=dark]{color-scheme:dark}
+*{box-sizing:border-box;min-width:0}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font:16px/1.55 "Red Hat Text",system-ui,sans-serif;overflow-x:clip}
+h1,h2,.big{font-family:"Red Hat Display",system-ui,sans-serif;letter-spacing:-.02em;line-height:1.05}
+.band{padding-block:clamp(24px,3.5vw,48px);padding-inline:max(5vw,16px)}
+.top{background:var(--band);color:#fff}
+.top .in{max-width:1240px;margin:auto;display:flex;flex-wrap:wrap;gap:12px 24px;align-items:end;justify-content:space-between}
+h1{font-size:clamp(32px,4.4vw,48px);margin:0;text-wrap:balance;font-weight:800}
+.top p{margin:6px 0 0;color:#c3cdea;max-width:60ch}
+.tools{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+select,button,input{font:inherit;font-size:16px}
+.tools select,.tools button{min-height:44px;border-radius:10px;border:1px solid #3b5291;background:#132a63;color:#fff;padding:0 14px;cursor:pointer}
+.tools button:hover,.tools select:hover{background:#1b3780}
+main{max-width:1240px;margin:auto;display:grid;grid-template-columns:minmax(0,1.35fr) minmax(0,1fr);gap:24px;padding:24px max(5vw,16px) 48px;align-items:start}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:20px}
+.cols{display:grid;gap:20px}
+h2{font-size:22px;margin:0;font-weight:700;display:flex;justify-content:space-between;gap:12px;align-items:baseline;flex-wrap:wrap}
+h2 small{font:600 16px "Red Hat Text",sans-serif;white-space:nowrap;font-variant-numeric:tabular-nums}
+.sub{color:var(--mute);font-size:14px;margin:4px 0 14px}
+.dot{display:inline-block;width:12px;height:12px;border-radius:3px;margin-right:8px;vertical-align:1px}
+.row{display:grid;gap:8px;align-items:center;padding:8px 0;border-top:1px solid var(--line)}
+.row:first-of-type{border-top:0}
+.r-inc,.r-fix{grid-template-columns:minmax(0,1fr) 5.8em 9em 44px}
+.r-debt{grid-template-columns:minmax(0,1.1fr) minmax(0,.7fr) minmax(0,1fr) 9.5em;grid-template-areas:"nm nm cc del" "pr rt emi calc";row-gap:6px}
+.r-debt .nm{grid-area:nm}.r-debt .cc{grid-area:cc}.r-debt .del{grid-area:del;justify-self:end}.r-debt .pr{grid-area:pr}.r-debt .rt{grid-area:rt}.r-debt .em{grid-area:emi}.r-debt .calc{grid-area:calc;align-self:end;padding-bottom:10px}
+.r-debt label::before{content:attr(data-l);display:block;font-size:13px;color:var(--mute)}
+.warn{color:var(--mag)!important;font-weight:600!important}
+.wrap{max-width:1240px;margin:-24px auto 48px;padding:0 max(5vw,16px)}
+.ctl{display:flex;flex-wrap:wrap;gap:12px 16px;align-items:end;margin:6px 0 16px}
+.ctl label{font-size:14px;color:var(--mute);display:grid;gap:4px}
+.ctl input{width:11em}
+.ghost{min-height:44px;border:1px solid var(--line);background:none;color:var(--ink);border-radius:10px;padding:0 14px;cursor:pointer;font-weight:600}
+.ghost:hover{border-color:var(--ink)}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(12em,1fr));gap:12px}
+.card{text-align:left;font:inherit;color:var(--ink);background:var(--field);border:2px solid var(--line);border-radius:12px;padding:14px 16px;cursor:pointer;display:grid;gap:2px}
+.card[aria-pressed=true]{border-color:var(--inc);background:color-mix(in srgb,var(--inc) 10%,var(--panel))}
+.card b{font:700 20px "Red Hat Display",sans-serif}
+.card .when{font:800 28px/1.1 "Red Hat Display",sans-serif;white-space:nowrap}
+.card span{font-size:14px;color:var(--mute)}
+.card .when{color:var(--ink);font-size:28px}
+.card .tag{color:#fff;font-size:13px}
+.tag{justify-self:start;font-size:13px;font-weight:600;background:var(--inc);color:#fff;border-radius:6px;padding:1px 8px;margin-top:4px}
+.sw{display:inline-block;width:18px;height:4px;border-radius:2px;vertical-align:4px;margin-right:6px}
+.plan .fig{min-height:320px;margin-top:16px}
+.scroll{overflow-x:auto}
+.pt{width:100%;border-collapse:collapse;margin-top:16px;font-size:15px}
+.pt th{text-align:left;font-size:13px;color:var(--mute);font-weight:500;padding:6px 8px;border-bottom:1px solid var(--line)}
+.pt td{padding:8px;border-bottom:1px solid var(--line)}
+.pt .n{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
+select.cc{min-height:44px;border:1px solid var(--line);border-radius:9px;background:var(--field);color:var(--ink);padding:0 6px;width:100%}
+.calc small{display:block;font-weight:400;color:var(--mute);font-size:13px;white-space:normal}
+.fx{display:grid;grid-template-columns:repeat(auto-fill,minmax(11em,1fr));gap:10px}
+.fx label{display:grid;grid-template-columns:auto minmax(0,1fr);gap:8px;align-items:center;font-size:15px;white-space:nowrap}
+.fxr{margin-top:10px;min-height:44px;border:1px solid var(--line);background:none;color:var(--ink);border-radius:10px;padding:0 14px;cursor:pointer}
+.head{font-size:13px;color:var(--mute);padding:0 0 4px;border:0}
+.head span:not(:first-child){text-align:right}
+input{width:100%;min-height:44px;border:1px solid var(--line);border-radius:9px;background:var(--field);color:var(--ink);padding:0 10px}
+input[type=number]{text-align:right;font-variant-numeric:tabular-nums}
+input:focus-visible,button:focus-visible,select:focus-visible{outline:3px solid #4d7cff;outline-offset:1px}
+.calc{text-align:right;font-weight:600;color:var(--int);font-variant-numeric:tabular-nums;white-space:nowrap}
+.del{width:44px;height:44px;border:0;background:none;color:var(--mute);border-radius:9px;cursor:pointer;font-size:22px;line-height:1}
+.del:hover{background:color-mix(in srgb,var(--mag) 12%,transparent);color:var(--mag)}
+.add{margin-top:10px;min-height:44px;border:1px dashed var(--line);background:none;color:var(--ink);border-radius:10px;padding:0 16px;cursor:pointer;font-weight:600;width:100%}
+.add:hover{border-color:var(--ink)}
+.empty{color:var(--mute);font-size:14px;padding:10px 0}
+.res{position:sticky;top:16px}
+.verdict{font-size:15px;color:var(--mute);margin:0}
+.big{font-size:clamp(40px,5.5vw,64px);font-weight:800;margin:4px 0 2px;white-space:nowrap;font-variant-numeric:tabular-nums}
+.neg{color:var(--mag)}.pos{color:var(--inc)}
+.bars{margin:20px 0 8px;display:grid;gap:12px}
+.bl{display:flex;justify-content:space-between;font-size:14px;margin-bottom:4px;gap:8px}
+.bl b{white-space:nowrap;font-variant-numeric:tabular-nums}
+.track{height:34px;border-radius:7px;background:var(--field);display:flex;overflow:hidden;border:1px solid var(--line)}
+.seg{height:100%;transition:width .35s ease}
+.sum{width:100%;border-collapse:collapse;margin-top:14px;font-size:15px}
+.sum td{padding:7px 0;border-top:1px solid var(--line)}
+.sum td:last-child{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums;font-weight:600}
+.sum tr.tot td{font-weight:700;font-size:16px;border-top:2px solid var(--ink)}
+.note{font-size:14px;color:var(--mute);margin:14px 0 0}
+.copy{margin-top:14px;min-height:44px;width:100%;border-radius:10px;border:0;background:var(--band);color:#fff;font-weight:600;cursor:pointer}
+:root[data-theme=dark] .copy{background:#1d3a85}
+@media(prefers-color-scheme:dark){:root:not([data-theme=light]) .copy{background:#1d3a85}}
+.pit{grid-column:1/-1;padding:16px 20px 0;overflow:hidden}
+.pit .fig{min-height:380px;margin:8px -20px 0}
+.pit h2 small{color:var(--mute);font-weight:500}
+.fig{position:relative}.fig>svg{position:absolute;inset:0;width:100%;height:100%}
+.fig text{paint-order:stroke;stroke:var(--panel);stroke-width:0;font:600 14px "Red Hat Text",sans-serif}
+.fig .lt{fill:#fff}.fig .dk{fill:var(--ink)}
+.goals{list-style:none;margin:0 -20px;padding:0 16px;display:grid;gap:6px;background:#4f8f3f}
+.goals:not(:empty){padding:12px 16px 14px}
+.goals li{background:#fff6dc;color:#3b2a14;border:1px solid #b8904a;border-radius:6px;padding:6px 10px;font-weight:600;font-size:15px}
+.foot{max-width:1240px;margin:-28px auto 40px;padding:0 max(5vw,16px);font-size:13px;color:var(--mute)}
+@media(max-width:900px){main{grid-template-columns:minmax(0,1fr)}.pit{order:-2}.res{order:-1;top:0;z-index:5}.res .bars,.res .sum,.res .note,.res .copy{display:none}.res.open .bars,.res.open .sum,.res.open .note,.res.open .copy{display:revert}.res .big{font-size:clamp(32px,9vw,44px)}.tog{display:block!important}}
+.tog{display:none;margin-top:8px;background:none;border:0;color:var(--mute);text-decoration:underline;cursor:pointer;min-height:44px;padding:0}
+@media(max-width:560px){.r-debt{grid-template-columns:minmax(0,1fr) minmax(0,1fr) 5.5em;grid-template-areas:"nm nm nm" "cc pr pr" "rt emi emi" "calc calc del"}.r-debt .calc{padding-bottom:0}.r-inc,.r-fix{grid-template-columns:5.8em minmax(0,1fr) 44px}.r-inc .nm,.r-fix .nm{grid-column:1/-1}.panel{padding:16px}}
+
+.curl{font-size:14px;color:#c3cdea}
+button,select,input{touch-action:manipulation}
+.top{padding-top:max(clamp(24px,3.5vw,48px),env(safe-area-inset-top))}
+@media(max-width:900px){
+.res{display:grid;grid-template-columns:minmax(0,1fr) auto;column-gap:12px;align-items:center;padding:10px 16px;margin-inline:-6px;border-radius:0 0 14px 14px;box-shadow:0 6px 18px rgba(11,31,75,.18);max-height:80vh;max-height:80svh;overflow-y:auto;overscroll-behavior:contain}
+.res #verdict{grid-column:1;font-size:13px}
+.res .big{grid-column:1;margin:0;font-size:clamp(26px,8vw,36px)!important}
+.res #yr{display:none}
+.res.open #yr{display:block;grid-column:1/-1}
+.res .tog{grid-column:2;grid-row:1/3;margin:0;text-decoration:none;border:1px solid var(--line);border-radius:999px;padding:0 16px;color:var(--ink);font-weight:600;background:var(--field)}
+.res .bars,.res .sum,.res .note,.res .copy{grid-column:1/-1}
+}
+@media(max-width:560px){
+.top{padding-bottom:20px}
+h1{font-size:30px}
+.top p{font-size:15px}
+.tools{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));width:100%}
+.tools .curl{grid-column:1/-1;margin-bottom:-4px}
+.tools select,.tools button{width:100%;padding:0 8px}
+main{padding-top:16px;gap:16px}
+.pit h2 small{display:none}
+.cards{grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.card{padding:10px;gap:0}
+.card b{font-size:15px}
+.card .sw{display:block;margin:0 0 6px}
+.card span:not(.when):not(.tag){font-size:12px}
+.card .d{display:none}
+.card .when{font-size:18px!important;white-space:normal;margin:4px 0}
+.card .tag{font-size:11px!important;padding:1px 5px}
+.ctl{display:grid;grid-template-columns:minmax(0,1fr)}
+.ctl input{width:100%}
+.wrap{margin-top:-16px}
+}
+@media(prefers-reduced-motion:reduce){.seg{transition:none}}
+</style>
+</head>
+<body>
+<header class="band top"><div class="in">
+<div><h1>How far in the hole am I?</h1><p>Income in, interest and fixed costs out, every month.</p></div>
+<div class="tools">
+<label for="cur" class="curl">Show totals in</label>
+<select id="cur"></select>
+<button id="undo" type="button">Undo</button>
+<button id="sample" type="button">Load example</button>
+<button id="clear" type="button">Clear all</button>
+</div></div></header>
+
+<main>
+<section class="panel pit"><h2><span id="pitT">The hole</span><small>Liabilities dig it, income builds the ladder</small></h2><div class="fig" id="fig"><svg id="svg" role="img" aria-label="Hole and ladder picture of your monthly balance"></svg></div><ul class="goals" id="goals"></ul></section>
+<div class="cols">
+<section class="panel"><h2><span><span class="dot" style="background:var(--inc)"></span>Monthly income</span><small id="tInc"></small></h2>
+<p class="sub">Fixed income that arrives each month: salary, rent received, interest, pension. Pick each row's currency.</p>
+<div id="inc"></div><button class="add" data-add="inc" type="button">+ Add income</button></section>
+
+<section class="panel"><h2><span><span class="dot" style="background:var(--int)"></span>Loans and debts</span><small id="tInt"></small></h2>
+<p class="sub">Principal outstanding, annual interest rate and the EMI you pay each month. Leave EMI empty if you only pay the interest. Don't also list these EMIs under fixed liabilities.</p>
+<div id="debt"></div><button class="add" data-add="debt" type="button">+ Add loan</button></section>
+
+<section class="panel"><h2><span><span class="dot" style="background:var(--fix)"></span>Fixed monthly liabilities</span><small id="tFix"></small></h2>
+<p class="sub">Bills and payments that stay the same each month: rent, EMIs, insurance, school fees.</p>
+<div id="fix"></div><button class="add" data-add="fix" type="button">+ Add liability</button></section>
+</div>
+
+<aside class="panel res" id="res" aria-live="polite">
+<p class="verdict" id="verdict"></p>
+<div class="big" id="net"></div>
+<p class="verdict" id="yr"></p>
+<button class="tog" id="tog" type="button">Details</button>
+<div class="bars">
+<div><div class="bl"><span>Income</span><b id="bInc"></b></div><div class="track"><div class="seg" id="sInc" style="background:var(--inc)"></div></div></div>
+<div><div class="bl"><span>Outgoings</span><b id="bOut"></b></div><div class="track"><div class="seg" id="sInt" style="background:var(--int)"></div><div class="seg" id="sFix" style="background:var(--fix)"></div></div></div>
+</div>
+<table class="sum"><tbody id="sum"></tbody></table>
+<p class="note" id="insight"></p>
+<button class="copy" id="copy" type="button">Copy summary</button>
+</aside>
+</main>
+<div class="wrap">
+<section class="panel plan" id="plan"><h2><span id="planT">Payoff plan</span></h2>
+<p class="sub">Every loan gets its EMI (or interest, if no EMI) each month. Your extra payment goes to one loan at a time, and when a loan is cleared its EMI rolls onto the next. Converted at the exchange rates at the bottom of the page.</p>
+<div class="ctl"><label for="extra"><span>Extra toward debt each month (<span id="exC"></span>)</span><input id="extra" type="number" inputmode="decimal" min="0" placeholder="0"></label><button class="ghost" id="useS" type="button"></button></div>
+<div class="cards" id="cards"></div>
+<div class="fig" id="tfig"><svg id="tsvg" role="img" aria-label="Total debt over time for each strategy"></svg></div>
+<div class="scroll"><table class="pt"><thead><tr><th>Order</th><th>Loan</th><th class="n">Paid off</th><th class="n">Interest paid</th></tr></thead><tbody id="pt"></tbody></table></div>
+<p class="note" id="planNote"></p>
+</section>
+<section class="panel" id="rates" style="margin-top:20px"><h2>Exchange rates</h2>
+<p class="sub">Value of 1 unit in ₹ INR, used to convert every row into your totals currency. The page can't fetch live rates, so check these against your bank or a converter and edit them. Starting rates are approximate for November 2026.</p>
+<div class="fx" id="fx"></div><button class="fxr" id="fxr" type="button">Reset to starting rates</button></section>
+</div>
+<p class="foot" id="foot">Your entries are saved in this browser only.</p>
+
+<script>
+{
+const KEY='hole-calc-v1';
+const CUR={INR:'₹',USD:'$',EUR:'€',GBP:'£',AED:'AED',SGD:'S$',CAD:'C$',AUD:'A$'};
+const RATES={INR:1,USD:94.4,EUR:111.3,GBP:129.5,AED:25.7,SGD:72.5,CAD:69.45,AUD:69.27};
+const SAMPLE={cur:'INR',sample:true,extra:10000,strat:'avalanche',rates:{...RATES},
+inc:[{n:'Salary (after tax)',c:'INR',a:95000},{n:'Rent from flat',c:'INR',a:18000},{n:'Freelance client',c:'USD',a:600}],
+debt:[{n:'Home loan',c:'INR',p:3200000,r:8.6,e:28000},{n:'Car loan',c:'INR',p:450000,r:9.5,e:9500},{n:'Credit card balance',c:'INR',p:85000,r:42,e:5000},{n:'UK student loan',c:'GBP',p:14000,r:6.25,e:150}],
+fix:[{n:'House rent',c:'INR',a:28000},{n:'Health insurance',c:'INR',a:2400},{n:'School fees',c:'INR',a:9500},{n:'Utilities and phone',c:'INR',a:4200},{n:'Groceries',c:'INR',a:15000},{n:'Software subscriptions',c:'USD',a:45}]};
+const blank=()=>({cur:'INR',extra:0,strat:'avalanche',rates:{...RATES},inc:[],debt:[],fix:[]});
+let st,hist=[];
+try{st=JSON.parse(localStorage.getItem(KEY))}catch(e){}
+if(!st||!st.inc)st=JSON.parse(JSON.stringify(SAMPLE));
+st.rates={...RATES,...(st.rates||{})};
+if(!CUR[st.cur])st.cur='INR';
+if(st.extra==null)st.extra=0;if(!['avalanche','snowball','min'].includes(st.strat))st.strat='avalanche';
+['inc','debt','fix'].forEach(k=>st[k].forEach(x=>{if(!CUR[x.c])x.c=st.cur}));
+const $=id=>document.getElementById(id);
+const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const fmt=(v,c=st.cur)=>{try{return new Intl.NumberFormat(c==='INR'?'en-IN':'en-GB',{style:'currency',currency:c,maximumFractionDigits:0}).format(Math.round(v))}catch(e){return c+' '+Math.round(v)}};
+const num=v=>{const x=parseFloat(v);return isFinite(x)?x:0};
+const rate=c=>num(st.rates[c])||RATES[c]||1;
+const cv=(v,c)=>v*rate(c)/rate(st.cur);
+const mi=d=>num(d.p)*num(d.r)/100/12;
+const lp=d=>num(d.e)>0?num(d.e):mi(d);
+const save=()=>{try{localStorage.setItem(KEY,JSON.stringify(st))}catch(e){}};
+const snap=()=>{hist.push(JSON.stringify(st));if(hist.length>40)hist.shift()};
+const opts=c=>Object.keys(CUR).map(k=>`<option value="${k}"${k===c?' selected':''}>${k}</option>`).join('');
+$('cur').innerHTML=Object.keys(CUR).map(k=>`<option value="${k}">${CUR[k]===k?k:CUR[k]+' '+k}</option>`).join('');
+const ccSel=(k,x,i)=>`<select class="cc" aria-label="Currency" data-k="${k}" data-i="${i}" data-f="c">${opts(x.c)}</select>`;
+const lineRow=(k,x,i)=>`<div class="row r-${k}"><input class="nm" aria-label="Name" data-k="${k}" data-i="${i}" data-f="n" value="${esc(x.n)}" placeholder="Name">${ccSel(k,x,i)}<input type="number" inputmode="decimal" min="0" aria-label="Amount per month" data-k="${k}" data-i="${i}" data-f="a" value="${x.a??''}" placeholder="0"><button class="del" data-del="${k}" data-i="${i}" aria-label="Remove ${esc(x.n)}" type="button">×</button></div>`;
+const debtRow=(x,i)=>`<div class="row r-debt"><input class="nm" aria-label="Loan name" data-k="debt" data-i="${i}" data-f="n" value="${esc(x.n)}" placeholder="Loan name">${ccSel('debt',x,i)}<label class="pr" data-l="Principal"><input type="number" inputmode="decimal" min="0" aria-label="Principal" data-k="debt" data-i="${i}" data-f="p" value="${x.p??''}" placeholder="0"></label><label class="rt" data-l="Rate % / yr"><input type="number" inputmode="decimal" min="0" step="0.1" aria-label="Annual rate percent" data-k="debt" data-i="${i}" data-f="r" value="${x.r??''}" placeholder="0"></label><label class="em" data-l="EMI / mo"><input type="number" inputmode="decimal" min="0" aria-label="EMI per month" data-k="debt" data-i="${i}" data-f="e" value="${x.e??''}" placeholder="Interest only"></label><span class="calc" id="mi${i}"></span><button class="del" data-del="debt" data-i="${i}" aria-label="Remove ${esc(x.n)}" type="button">×</button></div>`;
+const empty=t=>`<div class="empty">${t}</div>`;
+function renderFx(){$('fx').innerHTML=Object.keys(CUR).filter(k=>k!=='INR').map(k=>`<label for="fx-${k}">1 ${k} = ₹<input id="fx-${k}" type="number" inputmode="decimal" min="0" step="0.01" data-rate="${k}" value="${st.rates[k]}"></label>`).join('')}
+
+const S=$('svg');
+const short=(t,n)=>{t=t||'Unnamed';return t.length>n?t.slice(0,n-1)+'…':t};
+
+function view(W,g,pr,narrow,N,O){
+ const x0=pr+14,sx=W-(narrow?30:70),sy=Math.round(narrow?Math.max(46,g*.3):Math.max(80,g*.4));
+ const c1=[x0+(sx-x0)*.5,g],c2=[sx-(sx-x0)*.3,sy];
+ const B=t=>{const u=1-t;return[u*u*u*x0+3*u*u*t*c1[0]+3*u*t*t*c2[0]+t*t*t*sx,u*u*u*g+3*u*u*t*c1[1]+3*u*t*t*c2[1]+t*t*t*sy]};
+ let o='';
+ o+=`<path d="M${x0+(sx-x0)*.35} ${g}Q${x0+(sx-x0)*.7} ${sy+10} ${W} ${sy+30}V${g}Z" fill="#9cc98a" opacity=".85"/>`;
+ o+=`<path d="M${x0} ${g}C${c1} ${c2} ${sx} ${sy}S${W} ${sy+16} ${W} ${sy+26}V${g}Z" fill="#4f8f3f"/>`;
+ o+=`<path d="M${x0} ${g-2}C${c1[0]} ${c1[1]-2} ${c2[0]} ${c2[1]+2} ${sx} ${sy+4}" fill="none" stroke="#e9d9a8" stroke-width="5" stroke-dasharray="10 7" stroke-linecap="round"/>`;
+ const R=runs[st.strat],em=Math.ceil(6*O/N);
+ const goals=[`${cmp(N*12)} saved in a year`,`6-month safety net by ${dt(em)}`,R&&R.done?`Debt-free ${dt(R.m)}`:'Your next goal'];
+ const board=(x,y,t,a)=>{const w=t.length*7.6+20,bx=Math.max(8,Math.min(W-w-8,a==='c'?x-w/2:a==='r'?x-w+12:x-12));return `<rect x="${bx}" y="${y-28}" width="${w}" height="28" rx="5" fill="#fff6dc" stroke="#b8904a"/><text x="${bx+10}" y="${y-9}" fill="#3b2a14">${esc(t)}</text>`};
+ // flag at summit
+ o+=`<path d="M${sx} ${sy+2}V${sy-38}" stroke="#3b2a14" stroke-width="3"/><path d="M${sx} ${sy-38}l26 8l-26 8Z" fill="var(--inc)"/>`;
+ $('goals').innerHTML=narrow?goals.map(t=>`<li>${esc(t)}</li>`).join(''):'';
+ if(narrow){}
+ else{
+  [[.3,goals[0],'l'],[.62,goals[1],'r']].forEach(([t,txt,a])=>{const[x,y]=B(t);if(y-70>4){o+=`<path d="M${x} ${y}V${y-40}" stroke="#3b2a14" stroke-width="3"/>`+board(x,y-38,txt,a)}});
+  if(sy-72>4)o+=board(sx,sy-44,goals[2],'c');
+ }
+ return o;
+}
+function draw(){
+ const W=S.clientWidth,H=S.clientHeight;if(!W||!H)return;
+ const ins=st.inc.map(x=>({n:x.n,v:cv(num(x.a),x.c)})).filter(x=>x.v>0);
+ const outs=[...st.debt.map(d=>({n:d.n,v:cv(lp(d),d.c),t:'int'})),...st.fix.map(x=>({n:x.n,v:cv(num(x.a),x.c),t:'fix'}))].filter(x=>x.v>0);
+ const I=ins.reduce((s,x)=>s+x.v,0),O=outs.reduce((s,x)=>s+x.v,0),N=I-O,M=Math.max(I,O,1);
+ const narrow=W<520,bot=H-20,T0=I>O&&O>0?Math.round(Math.max(72,H*.46)):72,av=bot-T0,g=O>0?Math.round(bot-av*O/M):Math.round(H*.4);
+ const pw=Math.max(150,Math.min(W*.34,300)),px=narrow?Math.round(W*.12):I>O&&O>0?Math.round(Math.max(W*.22,200)):Math.round(W*.36),pr=px+pw;
+ const D=bot-g,L=av*I/M,pb=bot,lw=40,lx=pr-lw-14,top=pb-L;
+ const soil='#6b4c33',soilD='#4a3322',hole='#1c130c';
+ let o=`<defs><linearGradient id="dawn" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="var(--field)"/><stop offset="1" stop-color="#ffd98a" stop-opacity=".55"/></linearGradient><linearGradient id="sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="var(--field)"/><stop offset="1" stop-color="var(--panel)"/></linearGradient><linearGradient id="sl" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${soil}"/><stop offset="1" stop-color="${soilD}"/></linearGradient><pattern id="dots" width="14" height="14" patternUnits="userSpaceOnUse"><circle cx="3" cy="4" r="1.3" fill="#000" opacity=".18"/><circle cx="10" cy="11" r="1" fill="#fff" opacity=".08"/></pattern></defs>`;
+ o+=`<rect width="${W}" height="${g}" fill="url(#sky)"/><rect y="${g}" width="${W}" height="${H-g}" fill="url(#sl)"/><rect y="${g}" width="${W}" height="${H-g}" fill="url(#dots)"/><rect y="${g-4}" width="${W}" height="6" fill="#4c7a3a"/>`;
+ // pit
+ if(D>1){o+=`<rect x="${px}" y="${g}" width="${pw}" height="${D}" fill="${hole}"/><rect x="${px}" y="${pb-6}" width="${pw}" height="6" fill="#2e2016"/>`;
+  // strata on left wall
+  let y=g;outs.forEach((x,i)=>{const h=x.v/O*D;const c=x.t==='int'?'var(--int)':'var(--fix)';o+=`<rect x="${px}" y="${y}" width="12" height="${Math.max(h,.5)}" fill="${c}" opacity="${i%2?.75:1}"/>`;
+   if(!narrow&&h>=18)o+=`<text x="${px-10}" y="${y+h/2+5}" text-anchor="end" class="lt">${esc(short(x.n,18))} ${fmt(x.v)}</text>`;y+=h});
+ }
+ // rim labels
+ if(!narrow)o+=`<text x="16" y="${g-14}" class="dk">Ground level = break even</text>`;
+ if(D>60&&W-pr>160)o+=`<text x="${pr+18}" y="${pb-14}" class="lt">Depth ${fmt(O)} / mo</text>`;
+ // ladder
+ if(L>1){const lb=pb,lt=Math.max(top,pb-L);
+  let y=lb;ins.forEach((x,i)=>{const h=x.v/M*av;const yt=Math.max(lt,y-h);o+=`<rect x="${lx}" y="${yt}" width="5" height="${y-yt}" fill="var(--inc)" opacity="${i%2?.7:1}"/><rect x="${lx+lw-5}" y="${yt}" width="5" height="${y-yt}" fill="var(--inc)" opacity="${i%2?.7:1}"/>`;
+   const my2=(y+yt)/2;if(h>=18&&pw>200&&!(my2>g-12&&my2<g+12))o+=`<text x="${lx-10}" y="${my2+5}" text-anchor="end" class="${my2>g?'lt':'dk'}">${esc(short(x.n,14))}</text>`;y=yt});
+  for(let r=lb-12;r>lt+2;r-=16)o+=`<rect x="${lx+3}" y="${r}" width="${lw-6}" height="4" rx="1" fill="var(--inc)"/>`;
+ }
+ // person
+ const man=(x,y)=>`<g transform="translate(${x},${y})"><circle cx="0" cy="-34" r="7" fill="#f2c9a0"/><rect x="-6" y="-26" width="12" height="16" rx="4" fill="#ffd23f"/><rect x="-6" y="-10" width="5" height="10" fill="#1b2a4e"/><rect x="1" y="-10" width="5" height="10" fill="#1b2a4e"/></g>`;
+ const ladTop=pb-L;
+ if(N>=0&&O>0){o=o.replace('<rect width="'+W+'" height="'+g+'" fill="url(#sky)"/>','<rect width="'+W+'" height="'+g+'" fill="url(#dawn)"/>');o+=view(W,g,pr,narrow,N,O)+man(pr+30,g-2)}
+ else if(O>0){const my=Math.max(ladTop,top);o+=man(lx+lw/2,my+2);
+  const bx=pr+18;o+=`<path d="M${bx} ${g}h8M${bx+4} ${g}V${my}M${bx} ${my}h8" stroke="var(--mag)" stroke-width="3" fill="none"/>`;
+  const ty=(g+my)/2;o+=`<rect x="${bx+14}" y="${ty-15}" width="${narrow?W-bx-20:170}" height="30" rx="6" fill="var(--mag)"/><text x="${bx+24}" y="${ty+5}" class="lt">${fmt(-N)} short</text>`}
+ else o+=`<text x="${W/2}" y="${g+40}" text-anchor="middle" class="lt">Add liabilities to see the hole</text>`;
+ if(!(N>=0&&O>0))$('goals').innerHTML='';
+ S.innerHTML=o;
+ $('pitT').textContent=O===0?'The hole':N<0?`${Math.round(-N/O*100)}% of the way down, no ladder`:'Ladder clears the rim';
+ if(N<0&&O>0)$('pitT').textContent=`Ladder reaches ${Math.round(I/O*100)}% of the way up`;
+}
+new ResizeObserver(draw).observe(S);
+
+const NAMES={avalanche:'Avalanche',snowball:'Snowball',min:'EMIs only'};
+const DESC={avalanche:'Highest rate first',snowball:'Smallest balance first',min:'No extra payment'};
+const COL={avalanche:'var(--inc)',snowball:'#2f6fe4',min:'var(--mute)'};
+const now=new Date();
+const dt=m=>new Date(now.getFullYear(),now.getMonth()+m,1).toLocaleDateString('en-GB',{month:'short',year:'numeric'});
+const dur=m=>{const y=Math.floor(m/12),r=m%12;return ((y?y+' yr ':'')+(r||!y?r+' mo':'')).trim()};
+const cmp=v=>{try{return new Intl.NumberFormat(st.cur==='INR'?'en-IN':'en-GB',{style:'currency',currency:st.cur,notation:'compact',maximumFractionDigits:1}).format(v)}catch(e){return fmt(v)}};
+const CAP=600;
+function sim(strat,extra){
+ const L=st.debt.map(d=>({n:d.n||'Unnamed loan',b:cv(num(d.p),d.c),r:num(d.r)/1200,m:cv(lp(d),d.c),int:0,paid:null})).filter(l=>l.b>0.5);
+ const ser=[L.reduce((s,l)=>s+l.b,0)];let tot=0,m=0;
+ while(L.some(l=>l.paid==null)&&m<CAP){m++;
+  let pool=strat==='min'?0:extra;
+  for(const l of L){if(l.paid!=null){if(strat!=='min')pool+=l.m;continue}
+   const it=l.b*l.r;l.b+=it;l.int+=it;tot+=it;const pay=Math.min(l.m,l.b);l.b-=pay;if(strat!=='min')pool+=l.m-pay}
+  const act=L.filter(l=>l.paid==null&&l.b>0.5).sort(strat==='snowball'?(a,b)=>a.b-b.b:(a,b)=>b.r-a.r||a.b-b.b);
+  for(const l of act){if(pool<=0)break;const x=Math.min(pool,l.b);l.b-=x;pool-=x}
+  for(const l of L)if(l.paid==null&&l.b<=0.5){l.b=0;l.paid=m}
+  ser.push(L.reduce((s,l)=>s+l.b,0))}
+ return {done:L.every(l=>l.paid!=null),m,tot,ser,L};
+}
+let lastN=0,runs={};
+function plan(N){
+ lastN=N;const ex=Math.max(0,num(st.extra));
+ $('exC').textContent=st.cur;$('useS').textContent=N>0?`Use my surplus (${fmt(N)})`:'No surplus to use';$('useS').disabled=N<=0;
+ if(!st.debt.some(d=>num(d.p)>0)){$('cards').innerHTML='<p class="empty">Add a loan with a principal to plan its payoff.</p>';$('tsvg').innerHTML='';$('pt').innerHTML='';$('planNote').textContent='';$('planT').textContent='Payoff plan';return}
+ runs={avalanche:sim('avalanche',ex),snowball:sim('snowball',ex),min:sim('min',0)};
+ const fin=Object.values(runs).filter(r=>r.done);
+ const best=fin.length?Object.keys(runs).filter(k=>runs[k].done).reduce((a,b)=>runs[b].tot<runs[a].tot-1||(Math.abs(runs[b].tot-runs[a].tot)<=1&&runs[b].m<runs[a].m)?b:a):null;
+ $('cards').innerHTML=Object.keys(runs).map(k=>{const r=runs[k];return `<button class="card" type="button" data-s="${k}" aria-pressed="${st.strat===k}"><b><span class="sw" style="background:${COL[k]}"></span>${NAMES[k]}</b><span class="d">${DESC[k]}</span><span class="when">${r.done?dt(r.m):'Not in 50 yrs'}</span><span>${r.done?dur(r.m)+' · ':''}${fmt(r.tot)} interest${r.done?'':' and counting'}</span>${k===best?'<span class="tag">Least interest</span>':''}</button>`}).join('');
+ const R=runs[st.strat];
+ $('planT').textContent=R.done?`Debt-free by ${dt(R.m)} with ${NAMES[st.strat].toLowerCase()==='emis only'?'EMIs only':'the '+NAMES[st.strat].toLowerCase()}`:'At this pace the debt never clears';
+ $('pt').innerHTML=[...R.L].sort((a,b)=>(a.paid??1e9)-(b.paid??1e9)).map((l,i)=>`<tr><td>${l.paid!=null?i+1:'–'}</td><td>${esc(l.n)}</td><td class="n">${l.paid!=null?dt(l.paid):'Not cleared'}</td><td class="n">${fmt(l.int)}</td></tr>`).join('');
+ let note='';
+ if(runs.avalanche.done&&runs.snowball.done){const d=runs.snowball.tot-runs.avalanche.tot;note=Math.abs(d)<1?'Avalanche and snowball cost the same here.':d>0?`Avalanche saves ${fmt(d)} in interest over snowball.`:`Snowball saves ${fmt(-d)} over avalanche.`;
+  if(runs.min.done)note+=` Compared with paying EMIs only, your extra payment saves ${fmt(runs.min.tot-R.tot)} and ${dur(Math.max(0,runs.min.m-R.m))}.`}
+ const stuck=R.L.filter(l=>l.paid==null).map(l=>l.n);if(stuck.length)note+=` ${stuck.join(', ')} ${stuck.length>1?'are':'is'} not cleared because the payment barely covers the interest. Add an EMI or an extra payment.`;
+ if(ex>0&&N<ex)note+=` Note: the extra payment is more than your monthly ${N<0?'budget allows (you are already short)':'surplus'}.`;
+ $('planNote').textContent=note.trim();
+ tdraw();
+}
+const TS=$('tsvg');
+function tdraw(){
+ const W=TS.clientWidth,H=TS.clientHeight;if(!W||!H||!runs.min)return;
+ const ks=Object.keys(runs),fins=ks.filter(k=>runs[k].done).map(k=>runs[k].m);
+ const X=Math.min(CAP,Math.max(12,fins.length?Math.max(...fins)+3:360));
+ const Y=Math.max(...ks.map(k=>Math.max(...runs[k].ser.slice(0,X+1))),1);
+ const l=narrowT()?52:72,r=16,t=16,b=30,w=W-l-r,h=H-t-b;
+ const x=m=>l+m/X*w,y=v=>t+h-v/Y*h;
+ let o='';
+ [0,.5,1].forEach(f=>{const v=Y*f;o+=`<line x1="${l}" x2="${W-r}" y1="${y(v)}" y2="${y(v)}" stroke="var(--line)"/><text x="${l-8}" y="${y(v)+5}" text-anchor="end" fill="var(--mute)">${cmp(v)}</text>`});
+ const step=Math.max(1,Math.ceil((X/12)/(w/70)));
+ for(let m=0;m<=X;m++){const d=new Date(now.getFullYear(),now.getMonth()+m,1);if(d.getMonth()===0&&(d.getFullYear()%step===0)){o+=`<line x1="${x(m)}" x2="${x(m)}" y1="${t+h}" y2="${t+h+5}" stroke="var(--mute)"/><text x="${x(m)}" y="${H-6}" text-anchor="middle" fill="var(--mute)">${d.getFullYear()}</text>`}}
+ const path=k=>runs[k].ser.slice(0,X+1).map((v,m)=>(m?'L':'M')+x(m).toFixed(1)+' '+y(v).toFixed(1)).join('');
+ const S=st.strat;
+ o+=`<path d="${path(S)}L${x(Math.min(X,runs[S].ser.length-1))} ${t+h}L${l} ${t+h}Z" fill="${COL[S]}" opacity=".12"/>`;
+ ks.filter(k=>k!==S).forEach(k=>o+=`<path d="${path(k)}" fill="none" stroke="${COL[k]}" stroke-width="2" stroke-dasharray="${k==='min'?'5 5':'0'}" opacity=".8"/>`);
+ o+=`<path d="${path(S)}" fill="none" stroke="${COL[S]}" stroke-width="4" stroke-linejoin="round"/>`;
+ const R=runs[S];if(R.done&&R.m<=X){const px=x(R.m),lab='Debt-free '+dt(R.m);o+=`<circle cx="${px}" cy="${t+h}" r="7" fill="${COL[S]}" stroke="var(--panel)" stroke-width="3"/><text x="${px>W-150?(px-160<l?px:px-12):px+12}" y="${px>W-150&&px-160<l?t+h-26:t+h-14}" text-anchor="${px>W-150?(px-160<l?'middle':'end'):'start'}" fill="var(--ink)" style="font-weight:700">${lab}</text>`}
+ TS.innerHTML=o;
+}
+const narrowT=()=>TS.clientWidth<520;
+new ResizeObserver(tdraw).observe(TS);
+function render(){
+ $('cur').value=st.cur;
+ $('inc').innerHTML=st.inc.length?st.inc.map((x,i)=>lineRow('inc',x,i)).join(''):empty('No income added yet.');
+ $('debt').innerHTML=st.debt.length?st.debt.map(debtRow).join(''):empty('No loans added yet.');
+ $('fix').innerHTML=st.fix.length?st.fix.map((x,i)=>lineRow('fix',x,i)).join(''):empty('No fixed liabilities added yet.');
+ renderFx();$('extra').value=st.extra;calc();
+}
+function calc(){
+ const sumL=a=>a.reduce((s,x)=>s+cv(num(x.a),x.c),0);
+ const I=sumL(st.inc),F=sumL(st.fix),T=st.debt.reduce((s,d)=>s+cv(lp(d),d.c),0),TI=st.debt.reduce((s,d)=>s+cv(mi(d),d.c),0),P=st.debt.reduce((s,d)=>s+cv(num(d.p),d.c),0),O=T+F,N=I-O;
+ st.debt.forEach((d,i)=>{const e=$('mi'+i);if(!e)return;const cx=v=>d.c!==st.cur?` (≈ ${fmt(cv(v,d.c))})`:'';const hasE=num(d.e)>0;
+  e.innerHTML=hasE?`${fmt(num(d.e),d.c)} / mo<small>of which ${fmt(mi(d),d.c)} interest${cx(mi(d))}</small>`+(num(d.e)<=mi(d)?'<small class="warn">EMI below interest</small>':''):`${fmt(mi(d),d.c)} / mo<small>interest only${cx(mi(d))}</small>`});
+ $('tInc').textContent=fmt(I)+' / mo';$('tInt').textContent=fmt(T)+' / mo';$('tFix').textContent=fmt(F)+' / mo';
+ const net=$('net');net.textContent=(N<0?'−':N>0?'+':'')+fmt(Math.abs(N));net.className='big '+(N<0?'neg':'pos');
+ $('verdict').textContent=N<0?'You are short every month by':N>0?'You have left over every month':'You break even each month';
+ $('yr').textContent=(N<0?'That is ':'About ')+fmt(Math.abs(N*12))+(N<0?' in the hole over a year.':' a year.');
+ const m=Math.max(I,O,1);
+ $('sInc').style.width=I/m*100+'%';$('sInt').style.width=T/m*100+'%';$('sFix').style.width=F/m*100+'%';
+ $('bInc').textContent=fmt(I);$('bOut').textContent=fmt(O);
+ $('sum').innerHTML=[['Total income',fmt(I)],['Loan payments',fmt(T)],['of which interest',fmt(TI)],['Fixed liabilities',fmt(F)],['Total outgoings',fmt(O)],['Total principal owed',fmt(P)]].map(r=>`<tr><td>${r[0]}</td><td>${r[1]}</td></tr>`).join('')+`<tr class="tot"><td>Net per month</td><td class="${N<0?'neg':'pos'}">${N<0?'−':''}${fmt(Math.abs(N))}</td></tr>`;
+ let tip='';
+ if(st.debt.length&&T>0){const top=st.debt.reduce((a,b)=>cv(mi(b),b.c)>cv(mi(a),a.c)?b:a);const hi=st.debt.reduce((a,b)=>num(b.r)>num(a.r)?b:a);
+  tip=`${esc(top.n||'Your largest loan')} costs the most interest, ${fmt(cv(mi(top),top.c))} a month.`;
+  if(hi!==top)tip+=` ${esc(hi.n||'One loan')} has the highest rate (${num(hi.r)}%), so each ${fmt(1000)} paid off there saves ${fmt(1000*num(hi.r)/1200)} a month.`;
+  if(I>0)tip+=` Interest takes ${Math.round(TI/I*100)}% of your income.`}
+ const used=[...new Set(['inc','debt','fix'].flatMap(k=>st[k].map(x=>x.c)))].filter(c=>c!==st.cur);
+ if(used.length)tip+=` Rows in ${used.join(', ')} are converted using the exchange rates at the bottom.`;
+ $('insight').innerHTML=tip;
+ plan(N);draw();
+ $('foot').textContent=(st.sample?'Example figures are loaded; replace them with your own. ':'')+'Your entries are saved in this browser only.';
+ save();
+}
+document.addEventListener('focusin',e=>{if(e.target.dataset.f||e.target.dataset.rate||e.target.id==='extra')snap()});
+document.addEventListener('input',e=>{const t=e.target;
+ if(t.id==='extra'){st.extra=t.value===''?'':num(t.value);calc();return}
+ if(t.dataset.rate){st.rates[t.dataset.rate]=t.value===''?'':num(t.value);calc();return}
+ const k=t.dataset.k;if(!k)return;const f=t.dataset.f;const v=(f==='n'||f==='c')?t.value:(t.value===''?'':num(t.value));st[k][+t.dataset.i][f]=v;st.sample=false;if(f==='n')save();else calc()});
+document.addEventListener('click',e=>{const t=e.target.closest('button');if(!t)return;
+ if(t.dataset.add){snap();const k=t.dataset.add;st[k].push(k==='debt'?{n:'',c:st.cur,p:'',r:'',e:''}:{n:'',c:st.cur,a:''});st.sample=false;render();const ins=$(k).querySelectorAll('input.nm');ins[ins.length-1]?.focus()}
+ else if(t.dataset.s){snap();st.strat=t.dataset.s;calc()}
+ else if(t.dataset.del){snap();st[t.dataset.del].splice(+t.dataset.i,1);render()}});
+$('cur').onchange=e=>{snap();st.cur=e.target.value;render()};
+$('useS').onclick=()=>{snap();st.extra=Math.max(0,Math.round(lastN));$('extra').value=st.extra;calc()};
+$('fxr').onclick=()=>{snap();st.rates={...RATES};render()};
+$('undo').onclick=()=>{if(hist.length){st=JSON.parse(hist.pop());render()}};
+$('sample').onclick=()=>{snap();st=JSON.parse(JSON.stringify(SAMPLE));render()};
+$('clear').onclick=()=>{snap();st={...blank(),cur:st.cur,rates:st.rates};render()};
+$('tog').onclick=()=>{const r=$('res');r.classList.toggle('open');$('tog').textContent=r.classList.contains('open')?'Hide':'Details'};
+$('copy').onclick=async()=>{const lines=[...document.querySelectorAll('#sum tr')].map(r=>r.cells[0].textContent+': '+r.cells[1].textContent);
+ const conv=(v,c)=>fmt(v,c)+(c!==st.cur?` (≈ ${fmt(cv(v,c))})`:'');
+ const txt=['Monthly balance (totals in '+st.cur+')',...st.inc.map(x=>`Income – ${x.n}: ${conv(num(x.a),x.c)}`),...st.debt.map(d=>`Loan – ${d.n}: ${fmt(num(d.p),d.c)} at ${num(d.r)}%, pays ${conv(lp(d),d.c)}/mo (${conv(mi(d),d.c)} interest)`),...st.fix.map(x=>`Fixed – ${x.n}: ${conv(num(x.a),x.c)}`),'',...lines].join('\n');
+ try{await navigator.clipboard.writeText(txt);$('copy').textContent='Copied'}catch(e){$('copy').textContent='Copy not allowed here'}setTimeout(()=>$('copy').textContent='Copy summary',1600)};
+render();
+try{if('serviceWorker' in navigator&&(location.protocol==='https:'||location.hostname==='localhost'))navigator.serviceWorker.register('sw.js').catch(()=>{})}catch(e){}
+}
+</script>
+</body>
+</html>
